@@ -138,9 +138,14 @@ def food_recommend():
     recommend_index = userPrediction.index
     recommend_foods = []
     for i in range(len(recommend_index)):
-        recommend_foods.append(index_food[recommend_index[i]].replace('_', ' '))
+        food_name = index_food[recommend_index[i]].replace('_', ' ')
+        # Assuming 'get_image_url(food_name)' is a function that returns the image URL for a given food
+        #image_url = get_image_url(food_name)
+        image_url = "url"
+        recommend_foods.append({"foodName": food_name, "imageUrl": image_url})
     data = {
-        "food": recommend_foods[:10]
+        "foodList": recommend_foods[:10],
+        "count": len(recommend_foods[:10])
     }
     return jsonify(data), 200
 
@@ -231,6 +236,144 @@ def music_recommend():
         "music": music
     }
     return jsonify(data), 200
+
+app = Flask(__name__)
+from io import BytesIO
+
+
+
+import numpy as np
+
+from flask import request, make_response
+from urllib import parse
+
+from flask import Flask, jsonify
+
+
+
+from kiwipiepy import Kiwi
+kiwi = Kiwi()
+@app.route('/api/analysis/keywords', methods=['POST'])
+def keyword():
+    args = request.json
+    sentence = args['content']
+    sentence = parse.unquote(sentence, 'utf8')
+    print(type(sentence))
+
+    return twitter(sentence)
+
+
+from konlpy.tag import Okt
+from flask import Flask, jsonify, request
+from collections import Counter
+Okt=Okt()
+
+import csv
+
+with open('../stopword.csv', 'r', encoding='utf-8') as f:
+    reader = csv.reader(f)
+    stop_words = [word for row in reader for word in row]
+stop_words.append("못")
+stop_words.append("내")
+def morph(input_data) : #형태소 분석
+    preprocessed = Okt.pos(input_data)
+    return preprocessed
+
+def twitter(sen):
+
+    output = morph(sen)
+    result = []
+    print(output)
+    for i in output:
+        tem = ''.join(i)
+        nouns = Okt.nouns(tem)
+        result += nouns
+    final_result = [r for r in result if r not in stop_words]
+    # 단어 빈도수 계산
+    counter = Counter(final_result)
+    # 가장 빈도가 높은 10개 단어 추출
+    most_common_words = counter.most_common(10)
+
+    result = [{"word": word, "count": count} for word, count in most_common_words]
+
+    return jsonify(result)
+
+@app.route('/api/analysis/keywords/images', methods=['POST'])
+def word_visual():
+    args = request.json
+    sentence = args['content']
+    sentence = parse.unquote(sentence, 'utf8')
+    sents = kiwi.split_into_sents(sentence)
+    sents_list = [sent.text for sent in sents]
+    sentence_list = list(sents_list)
+    #sentence_list = sentence.split("\n")
+    img_wordcloud = word_cloud(sentence_list)
+    #img_wordcloud.to_file('test1.jpg')
+
+    response = upload(img_wordcloud)
+    return response
+
+from io import BytesIO
+
+import konlpy
+import numpy as np
+from matplotlib import pyplot as plt
+from wordcloud import WordCloud
+
+
+import PIL
+
+
+
+import pandas as pd
+
+kkma = konlpy.tag.Kkma() #형태소 분석기 꼬꼬마(Kkma)
+
+def word_cloud(sentence_list):
+
+    df_word = koko(sentence_list)
+
+    dic_word = df_word.set_index('word').to_dict()['count']
+
+    #icon = PIL.Image.open('../Food_Recommender/word/heart.png')
+
+    #img = PIL.Image.new('RGB', icon.size, (255,255,255))
+    #img.paste(icon, icon)
+    #img = np.array(img)
+
+    wc = WordCloud(random_state = 123, font_path = '/Users/kwonjiyun/Downloads/GmarketSansTTF/GmarketSansTTFBold', width = 400,
+               height = 400, background_color = 'white')
+
+    img_wordcloud = wc.generate_from_frequencies(dic_word)
+
+    return img_wordcloud
+
+
+
+
+def koko(sentence):
+    df = pd.DataFrame(sentence, columns=['Keyword'])
+
+    df['Keyword'] = df['Keyword'].str.replace('[^가-힣]', ' ', regex=True)
+    nouns = df['Keyword'].apply(kkma.nouns)
+    nouns = nouns.explode()
+    print(df)
+    df_word = pd.DataFrame({'word': nouns})
+
+    df_word['count'] = df_word['word'].str.len()
+    df_word = df_word.query('count >= 2')
+    return df_word
+
+
+
+
+def upload(img_wordcloud):
+    img_binary = BytesIO()
+    img_wordcloud.to_image().save(img_binary, format='PNG')
+    img_binary.seek(0)
+    response = make_response(img_binary.getvalue())
+    response.headers['Content-Type'] = 'image/png'
+    return response
 
 if __name__ == '__main__':
     app.run()
