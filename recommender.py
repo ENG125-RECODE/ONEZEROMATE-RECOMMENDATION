@@ -1,5 +1,5 @@
 # 라이브러리 임포트
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 import requests
 import pandas as pd
 from urllib import parse
@@ -34,6 +34,14 @@ conn = db_connection.connect()
 
 # seed 장르로 넣을 수 있는 것의 교집합 구하기 위한 변수 미리 선언
 seeds = sp.recommendation_genre_seeds()['genres']
+
+# recommendation seed size 확인 함수
+def size_check(seed): # recommendation seed에 사용할 리스트 인자로 받음
+    if len(seed) < 2:
+        size = 1
+    else:
+        size = 2
+    return size
 
 app = Flask(__name__)
 
@@ -217,13 +225,24 @@ def music_recommend():
     seed_genres = set(seed_genres)
     # seed 장르로 넣을 수 있는 값들의 교집합 구하기
     seed_genres = seed_genres.intersection(seeds)
-    # 장르, 아티스트 , 트랙 seed들 합쳐서 랜덤으로 합이 5개 경우의 수 다음과 같이 지정
-    # 랜덤으로 선택 진행
-    seed_ratio = [[2, 2, 1], [2, 1, 2]]
-    seed_ratio = random.choice(seed_ratio)
-    seed_g = random.sample(list(seed_genres), seed_ratio[0])
-    seed_t = random.sample(tracks_id, seed_ratio[1])
-    seed_a = random.sample(list(artists_id), seed_ratio[2])
+
+    # 우선 seed 값 1또는 2로 랜덤으로 지정
+    seed_g = random.sample(list(seed_genres), size_check(seed_genres))
+    seed_t = random.sample(tracks_id, size_check(seed_genres))
+    seed_a = random.sample(list(artists_id), size_check(seed_genres))
+
+    # seed 합이 5가 넘을 경우 다음 진행
+    if len(seed_g) + len(seed_t) + len(seed_a) > 5:
+        rr = [0, 1]
+        r = random.choice(rr)
+        if r == 0:
+            s = str(random.choice(seed_t))
+            seed_t = []
+            seed_t.append(s)
+        else:
+            s = str(random.choice(seed_a))
+            seed_a = []
+            seed_a.append(s)
 
     # recommend api 호출
     result = sp.recommendations(seed_artists=seed_a, seed_tracks=seed_t, seed_genres=seed_g, limit=10)
@@ -238,11 +257,8 @@ def music_recommend():
     return jsonify(data), 200
 
 app = Flask(__name__)
+
 from io import BytesIO
-
-
-
-import numpy as np
 
 from flask import request, make_response
 from urllib import parse
@@ -264,8 +280,8 @@ def keyword():
 
 
 from konlpy.tag import Okt
-from flask import Flask, jsonify, request
 from collections import Counter
+
 Okt=Okt()
 
 import csv
@@ -316,16 +332,12 @@ def word_visual():
 from io import BytesIO
 
 import konlpy
-import numpy as np
 from matplotlib import pyplot as plt
 from wordcloud import WordCloud
 
 
 import PIL
 
-
-
-import pandas as pd
 
 kkma = konlpy.tag.Kkma() #형태소 분석기 꼬꼬마(Kkma)
 
