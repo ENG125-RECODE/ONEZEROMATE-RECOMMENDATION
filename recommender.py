@@ -81,12 +81,18 @@ def user_check():
 def food_recommend():
     # uuid, 감정 인덱스 받아 옴
     args = request.json
-    user_id = args['uuid']  # 인코딩 필요할수도
+    uuid = args['uuid']  # 인코딩 필요할수도
     mood_index = args['mood']
 
     # food_length를 위해 food 테이블 불러오기
     foodProfile = pd.read_sql_table('food', conn)
     foodName = list(foodProfile['name'])
+
+    # 여기서 uuid 입력값 검증 - DB에 존재하는지 확인 필요
+    sql = "SELECT id FROM user WHERE uuid = %s"
+    cursor.execute(sql, (uuid))
+    result = cursor.fetchall()
+    userId = result[0][0]
 
     # user_food_table 형태를 위해 다음과 같이 선언
     array = np.zeros([len(foodName), 7])  # row: food, col: mood
@@ -95,20 +101,19 @@ def food_recommend():
 
     # UserFoodInteraction에서 불러와서 user_food_table 채우기
     sql = "SELECT food_id, mood_id FROM userfoodinteraction WHERE user_id = %s"
-    cursor.execute(sql, (1))
+    cursor.execute(sql, (userId))
     result = cursor.fetchall()
     for t in result:
         user_food_table.loc[t[0], t[1]] = 1
 
     # DB table -> dataframe
     foodProfile = pd.read_sql_table('food', conn)
-    foods = list(foodProfile['name'])
 
     # food_index, index_food 딕셔너리 선언
     index_food = foodProfile[['name']]
     index_food = index_food.to_dict()
     index_food = index_food['name']
-    index_food_swap = dict(zip(index_food.values(), index_food.keys()))
+    index_url = dict(foodProfile['img_url'])
     # 새로운 음식과 기존 음식 비교위해 size 변수 선언
     # -> 우선 DB에 저장된 음식을 기준으로 할 것이므로 생략
     #     user_food_table = pd.read_sql_table('user_food_table', conn)
@@ -119,10 +124,10 @@ def food_recommend():
     # 지금부터 추천 시작
 
     # 데이터 로드
-    foodProfile = pd.read_sql_table('food', conn)
+    # foodProfile = pd.read_sql_table('food', conn)
     # 1. foodProfile
     # 데이터 전처리
-    foodProfile.drop(columns=['name', 'id'], inplace=True)
+    foodProfile.drop(columns=['name', 'id', 'img_url'], inplace=True)
     foodProfile = foodProfile.astype(float)
     # 정규화
     scaler = MinMaxScaler()
@@ -147,9 +152,7 @@ def food_recommend():
     recommend_foods = []
     for i in range(len(recommend_index)):
         food_name = index_food[recommend_index[i]].replace('_', ' ')
-        # Assuming 'get_image_url(food_name)' is a function that returns the image URL for a given food
-        #image_url = get_image_url(food_name)
-        image_url = "url"
+        image_url = index_url[recommend_index[i]]
         recommend_foods.append({"foodName": food_name, "imageUrl": image_url})
     data = {
         "foodList": recommend_foods[:10],
@@ -231,7 +234,7 @@ def music_recommend():
     seed_t = random.sample(tracks_id, size_check(seed_genres))
     seed_a = random.sample(list(artists_id), size_check(seed_genres))
 
-    # seed 합이 5가 넘을 경우 다음 진행
+    # seed 합이 5가 넘을 경우 다음 진행 -> 트랙/아티스트 둘 중 랜덤으로 seed 의 수를 -1
     if len(seed_g) + len(seed_t) + len(seed_a) > 5:
         rr = [0, 1]
         r = random.choice(rr)
